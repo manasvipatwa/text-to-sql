@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text-to-SQL Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        textarea, input, button, select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        .output {
+            background: #f4f4f4;
+            padding: 10px;
+            border: 1px solid #ccc;
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        table, th, td {
+            border: 1px solid #ccc;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .progress-container {
+            width: 100%;
+            background-color: #f1f1f1;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            width: 0%;
+            height: 20px;
+            background-color: #4caf50;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+            border-radius: 5px;
+            transition: width 0.3s ease;
+        }
+        iframe {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ccc;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Text-to-SQL Interface</h1>
+
+        <!-- File Upload Section -->
+        <h2>Upload Your Database</h2>
+        <input type="file" id="file" accept=".db">
+        <button onclick="uploadFile()">Upload</button>
+        <p id="upload_status"></p>
+
+        <!-- Query Input Section -->
+        <h2>Enter Your Question</h2>
+        <textarea id="question" rows="4" placeholder="Enter your question (e.g., Show all products)"></textarea>
+        <h2>Select Table</h2>
+        <select id="table_name">
+            <option value="">Select a table</option>
+        </select>
+        <button onclick="generateSQL()">Generate SQL</button>
+
+        <!-- Progress Bar -->
+        <div class="progress-container">
+            <div id="progress_bar" class="progress-bar"></div>
+        </div>
+
+        <!-- Output Section -->
+        <div class="output">
+            <h2>Generated SQL:</h2>
+            <pre id="sql_query"></pre>
+            <button onclick="downloadSQL()">Download SQL</button>
+            <h2>Results:</h2>
+            <div id="results_table"></div>
+            <button onclick="downloadResults()">Download Results (CSV)</button>
+            <h2>Visualization</h2>
+            <iframe id="sweetviz_report"></iframe>
+        </div>
+    </div>
+
+    <script>
+        let databasePath = '';
+
+        // Function to upload the database file
+        async function uploadFile() {
+            const fileInput = document.getElementById('file');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert("Please select a file to upload.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData,
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                databasePath = data.file_path;
+                document.getElementById('upload_status').textContent = "File uploaded successfully!";
+
+                // Populate the table dropdown
+                const tableDropdown = document.getElementById('table_name');
+                tableDropdown.innerHTML = '<option value="">Select a table</option>';
+                data.table_names.forEach(table => {
+                    tableDropdown.innerHTML += `<option value="${table}">${table}</option>`;
+                });
+            } else {
+                document.getElementById('upload_status').textContent = "Error: " + data.error;
+            }
+        }
+
+        // Function to generate SQL and display results
+        async function generateSQL() {
+            const question = document.getElementById('question').value;
+            const tableName = document.getElementById('table_name').value;
+
+            if (!databasePath) {
+                alert("Please upload a database file first.");
+                return;
+            }
+
+            if (!question || !tableName) {
+                alert("Please enter both a question and select a table.");
+                return;
+            }
+
+            // Reset progress bar
+            const progressBar = document.getElementById('progress_bar');
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+
+            // Simulate progress
+            const interval = setInterval(() => {
+                const currentWidth = parseFloat(progressBar.style.width);
+                if (currentWidth < 90) { // Stop at 90% to wait for the actual response
+                    progressBar.style.width = (currentWidth + 1) + '%';
+                    progressBar.textContent = (currentWidth + 1) + '%';
+                }
+            }, 300); // Update progress every 300ms
+
+            try {
+                const response = await fetch('/generate-sql', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question: question,
+                        database_path: databasePath,
+                        table_name: tableName
+                    }),
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    // Complete the progress bar
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = '100%';
+
+                    // Display results or error
+                    if (data.results && !data.results.error) {
+                        document.getElementById('sql_query').textContent = data.sql_query;
+
+                        const resultsTable = document.getElementById('results_table');
+                        if (data.results.columns && data.results.rows) {
+                            let tableHtml = '<table>';
+                            tableHtml += '<tr>';
+                            data.results.columns.forEach(column => {
+                                tableHtml += `<th>${column}</th>`;
+                            });
+                            tableHtml += '</tr>';
+                            data.results.rows.forEach(row => {
+                                tableHtml += '<tr>';
+                                row.forEach(cell => {
+                                    tableHtml += `<td>${cell}</td>`;
+                                });
+                                tableHtml += '</tr>';
+                            });
+                            tableHtml += '</table>';
+                            resultsTable.innerHTML = tableHtml;
+                        } else {
+                            resultsTable.innerHTML = "No results found.";
+                        }
+
+                        // Display Sweetviz report
+                        if (data.report_html) {
+                            const blob = new Blob([data.report_html], { type: 'text/html' });
+                            const url = URL.createObjectURL(blob);
+                            document.getElementById('sweetviz_report').src = url;
+                        }
+                    } else {
+                        alert("SQL Error: " + data.results.error);
+                    }
+                } else {
+                    alert("Error: " + data.error);
+                }
+            } catch (error) {
+                alert("An error occurred: " + error.message);
+            } finally {
+                clearInterval(interval); // Stop the progress bar
+            }
+        }
+
+        // Function to download SQL query
+        function downloadSQL() {
+            const sqlQuery = document.getElementById('sql_query').textContent;
+            const blob = new Blob([sqlQuery], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'query.sql';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Function to download results as CSV
+        function downloadResults() {
+            const table = document.getElementById('results_table').querySelector('table');
+            if (!table) {
+                alert("No results to download.");
+                return;
+            }
+
+            let csv = '';
+            const rows = table.querySelectorAll('tr');
+            rows.forEach(row => {
+                const cols = row.querySelectorAll('th, td');
+                const rowData = Array.from(cols).map(col => col.textContent).join(',');
+                csv += rowData + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'results.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>

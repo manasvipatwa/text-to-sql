@@ -1,42 +1,83 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_from_directory
 import requests
 import sqlite3
 import re
 import os
 import pandas as pd
 import sweetviz as sv
+import uuid
+import matplotlib
+matplotlib.use('Agg')  # Set the backend before importing pyplot
+import matplotlib.pyplot as plt
+import random
+from threading import Lock
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Define the Ollama API endpoint
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
+sv.config_parser.read_string("[General]\nuse_threads = False")  # Disable Sweetviz threading
 
-# Function to generate SQL queries using Ollama
-def generate_sql(question):
+# Sample quiz questions for fallback
+SAMPLE_QUIZZES = [
+    {
+        "question": "What is the most popular database system?",
+        "options": ["MySQL", "PostgreSQL", "SQLite", "MongoDB"],
+        "correct": "MySQL"
+    },
+    {
+        "question": "What does SQL stand for?",
+        "options": ["Structured Query Language", "Simple Query Language", "Standard Query Language", "System Query Language"],
+        "correct": "Structured Query Language"
+    }
+]
+
+def generate_sql(question, table_name, column_names):
+    # Create a detailed schema description
+    schema_info = f"TABLE {table_name} ({', '.join(column_names)})"
+    
+    prompt = f"""
+You are a SQL expert. Given this database schema:
+{schema_info}
+
+Convert this natural language question to a precise SQL query:
+"{question}"
+
+Important rules:
+1. Strictly return the SQL query, no additional text
+2. Use the exact table and column names provided
+3. If filtering is needed, use appropriate WHERE clauses
+4. For aggregations, use GROUP BY where needed
+
+SQL Query:
+"""
+    
     payload = {
-        "model": "codellama",  # Replace with the model you downloaded
-        "prompt": f"Convert the following natural language question to SQL:\n\n{question}\n\nSQL Query:",
+        "model": "codellama",
+        "prompt": prompt,
         "stream": False
     }
-    response = requests.post(OLLAMA_API_URL, json=payload)
-    if response.status_code == 200:
-        return response.json()["response"]
-    else:
-        return f"Error: {response.status_code} - {response.text}"
+    
+    try:
+        response = requests.post(OLLAMA_API_URL, json=payload)
+        if response.status_code == 200:
+            sql = response.json()["response"]
+            # Remove any markdown code blocks
+            sql = re.sub(r'```sql|```', '', sql).strip()
+            return sql
+        return f"Error: {response.text}"
+    except Exception as e:
+        return f"Error: {str(e)}"
 
-# Function to extract column names
 def get_column_names(database_path, table_name):
     conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
     cursor.execute(f"PRAGMA table_info({table_name})")
     columns = cursor.fetchall()
     conn.close()
-    column_names = [column[1] for column in columns]
-    return column_names
+    return [column[1] for column in columns]
 
-# Function to get all table names from the database
 def get_table_names(database_path):
     conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
@@ -45,26 +86,9 @@ def get_table_names(database_path):
     conn.close()
     return [table[0] for table in tables]
 
-# Function to generate a prompt
-def generate_prompt(question, table_name, column_names):
-    schema_info = f"Table: {table_name}\nColumns: {', '.join(column_names)}"
-    prompt = f"""
-Given the following database schema:
-{schema_info}
-
-Question: {question}. Only give the SQL Query, don't write anything else.
-SQL Query:
-"""
-    return prompt
-
-# Function to clean the SQL query
 def clean_sql_query(sql_query):
-    sql_query = re.sub(r'```', '', sql_query)  # Remove triple backticks
-    sql_query = re.sub(r'`', '', sql_query)    # Remove single backticks
-    sql_query = sql_query.strip()              # Remove leading/trailing whitespace
-    return sql_query
+    return re.sub(r'```|`', '', sql_query).strip()
 
-# Function to execute SQL queries
 def execute_sql(database_path, sql_query):
     conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
@@ -72,31 +96,66 @@ def execute_sql(database_path, sql_query):
         cursor.execute(sql_query)
         results = cursor.fetchall()
         columns = [description[0] for description in cursor.description] if cursor.description else []
-        conn.commit()  # Commit changes for UPDATE/INSERT/DELETE queries
         return {"columns": columns, "rows": results}
     except sqlite3.Error as e:
-        return {"error": str(e)}  # Return error message
+        return {"error": str(e)}
     finally:
         conn.close()
 
-# Function to generate Sweetviz report
 def generate_sweetviz_report(results):
-    # Convert results to a Pandas DataFrame
     df = pd.DataFrame(results["rows"], columns=results["columns"])
-    
-    # Generate Sweetviz report
     report = sv.analyze(df)
-    report_path = os.path.join(app.config['UPLOAD_FOLDER'], 'sweetviz_report.html')
+    report_path = os.path.join(app.config['UPLOAD_FOLDER'], f'report_{uuid.uuid4()}.html')
     report.show_html(filepath=report_path, open_browser=False)
-    
     return report_path
 
-# Route for the home page
+def generate_dynamic_queries(df):
+    queries = []
+    numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
+    cat_cols = df.select_dtypes(include=['object']).columns
+    date_cols = [col for col in df.columns if 'date' in col.lower()]
+
+    if len(numeric_cols) > 0:
+        queries.append(f"Histogram of {numeric_cols[0]}")
+    if len(cat_cols) > 0:
+        queries.append(f"Bar chart of {cat_cols[0]}")
+    if len(date_cols) > 0 and len(numeric_cols) > 0:
+        queries.append(f"Line chart of {numeric_cols[0]} over time")
+    if len(numeric_cols) > 1:
+        queries.append(f"Scatter plot of {numeric_cols[0]} vs {numeric_cols[1]}")
+    
+    while len(queries) < 4:
+        col = df.columns[len(queries) % len(df.columns)]
+        queries.append(f"Box plot of {col}")
+    
+    return queries[:4]
+
+def generate_python_code(query):
+    prompt = f"Generate Python code using matplotlib/seaborn to create: {query}\nOnly provide the code."
+    response = requests.post(OLLAMA_API_URL, json={
+        "model": "codellama",
+        "prompt": prompt,
+        "stream": False
+    })
+    return response.json()["response"] if response.status_code == 200 else ""
+
+def execute_python_code(code, df):
+    try:
+        plt.figure()
+        exec_globals = {'df': df, 'plt': plt, 'pd': pd}
+        exec(code, exec_globals)
+        image_path = os.path.join(app.config['UPLOAD_FOLDER'], f'viz_{uuid.uuid4()}.png')
+        plt.savefig(image_path)
+        plt.close()
+        return image_path
+    except Exception as e:
+        print(f"Visualization error: {e}")
+        return None
+
 @app.route('/')
 def home():
     return render_template('index.html')
 
-# Route to handle file upload
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
@@ -109,16 +168,13 @@ def upload_file():
     if file and file.filename.endswith('.db'):
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
         file.save(file_path)
-        table_names = get_table_names(file_path)  # Get table names
         return jsonify({
             "message": "File uploaded successfully",
             "file_path": file_path,
-            "table_names": table_names  # Return table names
+            "table_names": get_table_names(file_path)
         })
-    else:
-        return jsonify({"error": "Invalid file type. Only .db files are allowed"}), 400
+    return jsonify({"error": "Only .db files allowed"}), 400
 
-# Route to handle SQL generation and execution
 @app.route('/generate-sql', methods=['POST'])
 def generate_and_execute_sql():
     data = request.json
@@ -127,36 +183,113 @@ def generate_and_execute_sql():
     table_name = data.get('table_name')
 
     if not os.path.exists(database_path):
-        return jsonify({"error": "Database file not found"}), 404
+        return jsonify({"error": "Database not found"}), 404
 
-    # Extract column names
+    # Get column names for the specified table
     column_names = get_column_names(database_path, table_name)
+    
+    # Generate SQL with table name and columns
+    sql_query = generate_sql(question, table_name, column_names)
+    cleaned_sql = clean_sql_query(sql_query)
+    
+    # Execute the query
+    results = execute_sql(database_path, cleaned_sql)
 
-    # Generate prompt with schema information
-    prompt = generate_prompt(question, table_name, column_names)
-
-    # Generate SQL query
-    sql_query = generate_sql(prompt)
-
-    # Clean the SQL query
-    cleaned_sql_query = clean_sql_query(sql_query)
-
-    # Execute the cleaned SQL query
-    results = execute_sql(database_path, cleaned_sql_query)
-
-    # Generate Sweetviz report if results are valid
+    report_path = None
     if "error" not in results:
         report_path = generate_sweetviz_report(results)
-        with open(report_path, 'r') as file:
-            report_html = file.read()
-    else:
-        report_html = None
 
     return jsonify({
-        "sql_query": cleaned_sql_query,
+        "sql_query": cleaned_sql,
         "results": results,
-        "report_html": report_html  # Send Sweetviz report HTML to frontend
+        "report_path": report_path,
+        "progress": 40
     })
+
+@app.route('/generate-visualizations', methods=['POST'])
+def generate_visualizations():
+    data = request.json
+    results = data.get('results')
+    
+    if not results or "error" in results:
+        return jsonify({"error": "Invalid results data"}), 400
+
+    try:
+        # Convert results to DataFrame
+        df = pd.DataFrame(results["rows"], columns=results["columns"])
+        
+        # Generate visualization queries
+        queries = generate_dynamic_queries(df)
+        visualizations = []
+        
+        # Set matplotlib backend explicitly
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        
+        for query in queries:
+            try:
+                # Generate Python code
+                code = generate_python_code(query)
+                if not code or "Error" in code:
+                    continue
+                
+                # Create new figure for each plot
+                plt.figure(figsize=(8, 6))
+                
+                # Prepare execution environment
+                exec_globals = {
+                    'df': df,
+                    'plt': plt,
+                    'pd': pd
+                }
+                
+                # Add seaborn if needed
+                if 'sns' in code:
+                    import seaborn as sns
+                    exec_globals['sns'] = sns
+                
+                # Execute the code
+                exec(code, exec_globals)
+                
+                # Save the visualization
+                img_name = f"viz_{uuid.uuid4().hex}.png"
+                img_path = os.path.join(app.config['UPLOAD_FOLDER'], img_name)
+                plt.savefig(img_path, bbox_inches='tight')
+                plt.close()
+                
+                visualizations.append(img_name)
+                
+            except Exception as e:
+                print(f"Failed to generate {query}: {str(e)}")
+                plt.close()
+                continue
+
+        return jsonify({
+            "queries": queries,
+            "visualizations": visualizations,
+            "message": f"Generated {len(visualizations)} visualizations"
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"Visualization generation failed: {str(e)}"}), 500
+        
+@app.route('/get-quiz', methods=['GET'])
+def get_quiz():
+    try:
+        response = requests.get('https://opentdb.com/api.php?amount=1&type=multiple', timeout=2)
+        if response.status_code == 200:
+            quiz = response.json()['results'][0]
+            return jsonify({
+                "question": quiz['question'],
+                "options": quiz['incorrect_answers'] + [quiz['correct_answer']],
+                "correct": quiz['correct_answer']
+            })
+    except:
+        pass
+    
+    # Fallback to sample quiz if API fails
+    quiz = random.choice(SAMPLE_QUIZZES)
+    return jsonify(quiz)
 
 if __name__ == '__main__':
     app.run(debug=True)

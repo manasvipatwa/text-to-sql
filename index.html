@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Query Generator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        h1 {
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        textarea, input, select {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            transition: border 0.3s;
+        }
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+        textarea:focus, input:focus, select:focus {
+            border-color: #3498db;
+            outline: none;
+            box-shadow: 0 0 5px rgba(52,152,219,0.3);
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button.secondary {
+            background-color: #95a5a6;
+            margin-left: 10px;
+        }
+        button.secondary:hover {
+            background-color: #7f8c8d;
+        }
+        .progress-container {
+            width: 100%;
+            background-color: #ecf0f1;
+            border-radius: 4px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 25px;
+            background-color: #2ecc71;
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        #quiz-container {
+            padding: 20px;
+            background: #e8f4fc;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid #bdc3c7;
+        }
+        .quiz-option {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            background: #d6eaf8;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: left;
+            color: black;
+        }
+        .quiz-option:hover {
+            background: #aed6f1;
+        }
+        #quiz-feedback {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .output {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-top: 30px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.05);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 0 10px rgba(0,0,0,0.05);
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        tr:hover {
+            background-color: #e8f4fc;
+        }
+        iframe {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .visualizations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+            margin-top: 30px;
+        }
+        .visualizations-grid img {
+            width: 100%;
+            height: auto;
+            border-radius: 6px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .visualizations-grid img:hover {
+            transform: translateY(-5px);
+        }
+        .status-message {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .success {
+            background-color: #d5f5e3;
+            color: #27ae60;
+            border-left: 4px solid #2ecc71;
+        }
+        .error {
+            background-color: #fadbd8;
+            color: #e74c3c;
+            border-left: 4px solid #e74c3c;
+        }
+        .error-message {
+            color: #e74c3c;
+            background-color: #fadbd8;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #e74c3c;
+        }
+        
+        .viz-placeholder {
+            text-align: center;
+            padding: 20px;
+            color: #7f8c8d;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .viz-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        
+        .viz-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .viz-card img {
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+        
+        .viz-error {
+            color: #e74c3c;
+            background: #fadbd8;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #e74c3c;
+        }
+        
+        .error-message {
+            color: #e74c3c;
+            padding: 15px;
+            background: #fadbd8;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SQL Query Generator</h1>
+        
+        <div class="section">
+            <h2>1. Upload Your Database</h2>
+            <input type="file" id="file" accept=".db,.sqlite,.sqlite3">
+            <button onclick="uploadFile()">Upload Database</button>
+            <div id="upload_status" class="status-message"></div>
+        </div>
+
+        <div class="section">
+            <h2>2. Enter Your Question</h2>
+            <textarea id="question" placeholder="Example: Show me the top 10 most expensive products in the electronics category"></textarea>
+            
+            <h2>3. Select Table</h2>
+            <select id="table_name">
+                <option value="">-- Select a table --</option>
+            </select>
+            
+            <button onclick="generateSQL()">Generate SQL</button>
+            <button onclick="resetForm()" class="secondary">Reset</button>
+        </div>
+
+        <div class="progress-container">
+            <div id="progress_bar" class="progress-bar">0%</div>
+        </div>
+
+        <div id="quiz-container" style="display: none;">
+            <h3>🧠 Fun Quiz While Processing</h3>
+            <div id="quiz-content">
+                <p>Loading quiz questions...</p>
+            </div>
+            <div id="quiz-feedback"></div>
+        </div>
+
+        <div class="output" id="output-section" style="display: none;">
+            <h2>Generated SQL Query</h2>
+            <pre id="sql_query"></pre>
+            <button onclick="downloadSQL()">Download SQL</button>
+            <button onclick="copySQL()" class="secondary">Copy to Clipboard</button>
+            
+            <h2>Query Results</h2>
+            <div id="results_table"></div>
+            <button onclick="downloadResults()">Download as CSV</button>
+            
+            <h2>Data Analysis Report</h2>
+            <iframe id="sweetviz_report"></iframe>
+            
+            <h2>Suggested Visualizations</h2>
+            <div id="visualization_queries"></div>
+            
+            <h2>Generated Charts</h2>
+            <div id="visualizations_grid" class="visualizations-grid"></div>
+        </div>
+    </div>
+
+    <script>
+        let databasePath = '';
+        let quizInterval = null;
+        let currentQuiz = null;
+
+        // Upload database file
+        async function uploadFile() {
+            const fileInput = document.getElementById('file');
+            const file = fileInput.files[0];
+            const status = document.getElementById('upload_status');
+            
+            if (!file) {
+                status.textContent = "Please select a database file first.";
+                status.className = "status-message error";
+                return;
+            }
+
+            status.textContent = "Uploading database...";
+            status.className = "status-message";
+            
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    databasePath = data.file_path;
+                    status.textContent = "Database uploaded successfully!";
+                    status.className = "status-message success";
+                    
+                    // Populate table dropdown
+                    const tableDropdown = document.getElementById('table_name');
+                    tableDropdown.innerHTML = '<option value="">-- Select a table --</option>';
+                    data.table_names.forEach(table => {
+                        tableDropdown.innerHTML += `<option value="${table}">${table}</option>`;
+                    });
+                } else {
+                    status.textContent = "Error: " + (data.error || "Failed to upload database");
+                    status.className = "status-message error";
+                }
+            } catch (error) {
+                status.textContent = "Upload failed: " + error.message;
+                status.className = "status-message error";
+            }
+        }
+
+        // Generate SQL from natural language
+        async function generateSQL() {
+            const question = document.getElementById('question').value;
+            const tableName = document.getElementById('table_name').value;
+            const outputSection = document.getElementById('output-section');
+            
+            // Validate inputs
+            if (!databasePath) {
+                alert("Please upload a database file first.");
+                return;
+            }
+            if (!question) {
+                alert("Please enter your question.");
+                return;
+            }
+            if (!tableName) {
+                alert("Please select a table from the database.");
+                return;
+            }
+
+            // Reset UI and show loading state
+            resetUI();
+            updateProgress(10);
+            startQuiz();
+            outputSection.style.display = 'block';
+
+            try {
+                // Step 1: Generate and execute SQL
+                const response = await fetch('/generate-sql', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        question: question,
+                        database_path: databasePath,
+                        table_name: tableName
+                    })
+                });
+
+                const data = await response.json();
+                updateProgress(data.progress || 40);
+                
+                if (!response.ok) {
+                    throw new Error(data.error || "Failed to generate SQL");
+                }
+
+                // Display results
+                document.getElementById('sql_query').textContent = data.sql_query;
+                displayResultsTable(data.results);
+                
+                // Show report if available
+                if (data.report_path) {
+                    document.getElementById('sweetviz_report').src = 
+                        `/uploads/${data.report_path.split('/').pop()}`;
+                }
+
+                // Generate visualizations
+                await generateVisualizations(data.results, tableName);
+                
+            } catch (error) {
+                alert("Error: " + error.message);
+                document.getElementById('output-section').style.display = 'none';
+            } finally {
+                stopQuiz();
+                updateProgress(100);
+            }
+        }
+
+        // Display results in a table
+        function displayResultsTable(results) {
+            const tableDiv = document.getElementById('results_table');
+            
+            if (!results || !results.columns || !results.rows) {
+                tableDiv.innerHTML = "<p>No results found or query didn't return any data.</p>";
+                return;
+            }
+
+            let html = '<table><thead><tr>';
+            results.columns.forEach(col => {
+                html += `<th>${col}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+            
+            results.rows.forEach(row => {
+                html += '<tr>';
+                row.forEach(cell => {
+                    html += `<td>${cell !== null ? cell : 'NULL'}</td>`;
+                });
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            tableDiv.innerHTML = html;
+        }
+
+        // Generate visualizations
+        async function generateVisualizations(results, tableName) {
+    const vizQueriesDiv = document.getElementById('visualization_queries');
+    const vizGrid = document.getElementById('visualizations_grid');
+    
+    vizQueriesDiv.innerHTML = '<p>Generating visualizations...</p>';
+    vizGrid.innerHTML = '<div class="loading-spinner"></div>';
+
+    try {
+        const response = await fetch('/generate-visualizations', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                results: results,
+                table_name: tableName
+            })
+        });
+
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || "Failed to generate visualizations");
+        }
+
+        // Display queries
+        vizQueriesDiv.innerHTML = '<h3>Recommended Visualizations:</h3><ul>';
+        if (data.queries && data.queries.length > 0) {
+            data.queries.forEach(query => {
+                vizQueriesDiv.innerHTML += `<li>${query}</li>`;
+            });
+        } else {
+            vizQueriesDiv.innerHTML += '<li>No visualization queries generated</li>';
+        }
+        vizQueriesDiv.innerHTML += '</ul>';
+
+        // Display visualizations
+        vizGrid.innerHTML = '';
+        if (data.visualizations && data.visualizations.length > 0) {
+            data.visualizations.forEach(vizFile => {
+                const vizCard = document.createElement('div');
+                vizCard.className = 'viz-card';
+                
+                const img = document.createElement('img');
+                img.src = `/uploads/${vizFile}`;
+                img.alt = 'Data visualization';
+                img.onerror = function() {
+                    this.parentNode.innerHTML = '<p class="viz-error">Failed to load visualization</p>';
+                };
+                
+                vizCard.appendChild(img);
+                vizGrid.appendChild(vizCard);
+            });
+        } else {
+            vizGrid.innerHTML = `
+                <div class="viz-error">
+                    <p>No visualizations could be generated</p>
+                    <p>Possible reasons:</p>
+                    <ul>
+                        <li>Data format not suitable for visualization</li>
+                        <li>Visualization generation failed</li>
+                        <li>Insufficient data points</li>
+                    </ul>
+                </div>
+            `;
+        }
+
+    } catch (error) {
+        vizGrid.innerHTML = `
+            <div class="error-message">
+                <p>Visualization Error:</p>
+                <p>${error.message}</p>
+            </div>
+        `;
+        console.error("Visualization error:", error);
+    }
+}
+        
+        // Quiz functionality
+        function startQuiz() {
+            document.getElementById('quiz-container').style.display = 'block';
+            loadNewQuiz();
+            
+            // Load new quiz every 20 seconds
+            quizInterval = setInterval(loadNewQuiz, 20000);
+        }
+
+        function stopQuiz() {
+            clearInterval(quizInterval);
+            document.getElementById('quiz-container').style.display = 'none';
+        }
+
+        async function loadNewQuiz() {
+            try {
+                const response = await fetch('/get-quiz');
+                currentQuiz = await response.json();
+                
+                const quizContent = document.getElementById('quiz-content');
+                quizContent.innerHTML = `
+                    <p>${currentQuiz.question}</p>
+                    ${currentQuiz.options.map(opt => 
+                        `<button class="quiz-option" onclick="checkAnswer('${escapeHtml(opt)}')">
+                            ${opt}
+                        </button>`
+                    ).join('')}
+                `;
+                document.getElementById('quiz-feedback').innerHTML = '';
+            } catch (error) {
+                console.error("Failed to load quiz:", error);
+            }
+        }
+
+        function checkAnswer(selected) {
+            if (!currentQuiz) return;
+            
+            const feedback = document.getElementById('quiz-feedback');
+            if (selected === currentQuiz.correct) {
+                feedback.innerHTML = '✅ Correct! Well done!';
+                feedback.style.color = '#27ae60';
+            } else {
+                feedback.innerHTML = `❌ Incorrect! The correct answer was: ${currentQuiz.correct}`;
+                feedback.style.color = '#e74c3c';
+            }
+            
+            // Load new question after 3 seconds
+            setTimeout(loadNewQuiz, 3000);
+        }
+
+        // Helper function to escape HTML
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Update progress bar
+        function updateProgress(percent) {
+            const bar = document.getElementById('progress_bar');
+            bar.style.width = `${percent}%`;
+            bar.textContent = `${percent}%`;
+        }
+
+        // Reset the UI
+        function resetUI() {
+            document.getElementById('sql_query').textContent = '';
+            document.getElementById('results_table').innerHTML = '';
+            document.getElementById('visualization_queries').innerHTML = '';
+            document.getElementById('visualizations_grid').innerHTML = '';
+            document.getElementById('sweetviz_report').src = '';
+            updateProgress(0);
+        }
+
+        // Reset the entire form
+        function resetForm() {
+            document.getElementById('file').value = '';
+            document.getElementById('question').value = '';
+            document.getElementById('table_name').innerHTML = '<option value="">-- Select a table --</option>';
+            document.getElementById('upload_status').textContent = '';
+            document.getElementById('upload_status').className = 'status-message';
+            document.getElementById('output-section').style.display = 'none';
+            resetUI();
+            stopQuiz();
+        }
+
+        // Download SQL button
+        function downloadSQL() {
+            const sql = document.getElementById('sql_query').textContent;
+            if (!sql) {
+                alert("No SQL query to download");
+                return;
+            }
+            
+            const blob = new Blob([sql], {type: 'text/plain'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'generated_query.sql';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Copy SQL to clipboard
+        function copySQL() {
+            const sql = document.getElementById('sql_query').textContent;
+            if (!sql) {
+                alert("No SQL query to copy");
+                return;
+            }
+            
+            navigator.clipboard.writeText(sql)
+                .then(() => alert("SQL query copied to clipboard!"))
+                .catch(err => alert("Failed to copy: " + err));
+        }
+
+        // Download results as CSV
+        function downloadResults() {
+            const table = document.getElementById('results_table').querySelector('table');
+            if (!table) {
+                alert("No results to download");
+                return;
+            }
+            
+            let csv = '';
+            const rows = table.querySelectorAll('tr');
+            rows.forEach(row => {
+                const cols = row.querySelectorAll('th, td');
+                csv += Array.from(cols).map(col => {
+                    // Escape quotes and wrap in quotes
+                    const text = col.textContent.replace(/"/g, '""');
+                    return `"${text}"`;
+                }).join(',') + '\n';
+            });
+            
+            const blob = new Blob([csv], {type: 'text/csv'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'query_results.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
